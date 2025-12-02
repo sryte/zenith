@@ -4,7 +4,7 @@ A highly realistic, single-file 3D helicopter combat simulator built using Three
 
 🚀 Getting Started
 
-Download: Download the combat_heli.html file to your computer.
+Download: Download the game.html file to your computer.
 
 Run: Open the file directly in any modern web browser (Chrome, Firefox, etc.).
 
