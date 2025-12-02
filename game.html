@@ -1,0 +1,879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZENITH</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Consolas', 'Monaco', monospace; user-select: none; }
+        canvas { display: block; }
+        
+        /* --- HUD --- */
+        #hud-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; display: flex; flex-direction: column;
+            justify-content: space-between; padding: 20px; box-sizing: border-box;
+        }
+
+        .hud-panel {
+            background: rgba(10, 20, 10, 0.6); border: 1px solid rgba(0, 255, 170, 0.3);
+            color: #00ffaa; padding: 10px; backdrop-filter: blur(4px);
+            clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+            box-shadow: 0 0 15px rgba(0, 255, 170, 0.1);
+        }
+
+        /* Controls info hidden by default */
+        #info-panel { position: absolute; top: 20px; left: 20px; width: 280px; display: none; }
+        
+        #instruments-bar { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 20px; align-items: flex-end; }
+
+        /* Updated Gauge Style: Numbers + Bar */
+        .gauge { 
+            width: 140px; text-align: center; 
+            border: 1px solid #00ffaa; background: rgba(0, 20, 10, 0.8);
+            padding: 10px; display: flex; flex-direction: column; gap: 5px;
+            box-shadow: 0 0 15px rgba(0, 255, 170, 0.15);
+        }
+        .gauge-val { font-size: 28px; font-weight: bold; color: #fff; text-shadow: 0 0 8px #00ffaa; }
+        .gauge-label { font-size: 10px; color: #00ffaa; letter-spacing: 2px; font-weight: bold; }
+        
+        .bar-track { 
+            width: 100%; height: 6px; background: #112211; 
+            border: 1px solid #335533; margin-top: 2px; 
+        }
+        .bar-fill { 
+            height: 100%; background: #00ffaa; width: 0%; 
+            box-shadow: 0 0 5px #00ffaa; transition: width 0.05s linear; 
+        }
+
+        #notification-area { position: absolute; top: 20%; left: 50%; transform: translateX(-50%); text-align: center; pointer-events: none; }
+        .notify-msg {
+            background: rgba(0, 0, 0, 0.7); border-left: 4px solid #00ffaa; color: #fff;
+            padding: 10px 20px; margin-bottom: 5px; font-size: 14px; letter-spacing: 1px;
+            opacity: 0; animation: fadeInOut 3s forwards;
+        }
+        @keyframes fadeInOut { 0% { opacity: 0; transform: translateY(-10px); } 10% { opacity: 1; transform: translateY(0); } 90% { opacity: 1; } 100% { opacity: 0; transform: translateY(-10px); } }
+
+        /* RED CROSSHAIR */
+        #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 40px; height: 40px; }
+        .ch-line { position: absolute; background: #ff0000; box-shadow: 0 0 5px #ff0000; }
+        .ch-h { top: 50%; left: 0; width: 100%; height: 2px; }
+        .ch-v { left: 50%; top: 0; height: 100%; width: 2px; }
+
+        .key-badge { display: inline-block; background: #223322; color: #fff; padding: 2px 6px; border-radius: 2px; font-size: 10px; border: 1px solid #446644; margin-right: 5px; }
+
+        /* SCREENS */
+        #overlay, #pause-menu, #controls-menu {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; color: #d4a017;
+            z-index: 100; text-align: center;
+        }
+        #pause-menu, #controls-menu { display: none; z-index: 200; background: rgba(0,10,5,0.95); }
+
+        #menu-btn {
+            position: absolute; top: 20px; right: 20px; font-size: 30px; color: #00ffaa;
+            cursor: pointer; z-index: 50; pointer-events: auto; user-select: none;
+        }
+        #menu-btn:hover { color: #fff; }
+
+        .menu-btn-style {
+            background: rgba(0, 50, 40, 0.6); border: 1px solid #00ffaa; color: #00ffaa;
+            padding: 15px 40px; margin: 10px; font-size: 18px; cursor: pointer;
+            width: 250px; text-transform: uppercase; letter-spacing: 2px;
+            transition: all 0.2s;
+        }
+        .menu-btn-style:hover { background: #00ffaa; color: #000; }
+
+        /* Controls Grid */
+        #bind-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 20px; text-align: left;
+            margin-bottom: 30px; width: 600px; padding: 20px;
+            background: rgba(0, 20, 10, 0.5); border: 1px solid #335544;
+        }
+        .bind-row { 
+            display: flex; justify-content: space-between; align-items: center; 
+            padding: 10px; border-bottom: 1px solid #333; 
+        }
+        .bind-key { 
+            background: #222; border: 1px solid #555; padding: 8px 16px; 
+            cursor: pointer; color: #fff; font-weight: bold; min-width: 100px; text-align: center;
+        }
+        .bind-key:hover { background: #444; border-color: #fff; }
+        .bind-key.listening { background: #ffaa00; color: #000; border-color: #ffaa00; }
+
+        #game-over {
+            display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(50, 0, 0, 0.6); flex-direction: column;
+            justify-content: center; align-items: center; color: red;
+            z-index: 200; pointer-events: auto; /* Allow clicking button */
+        }
+
+        #alt-lock-indicator {
+            position: absolute; top: 50%; right: 150px; transform: translateY(-50%);
+            color: #333; font-weight: bold; border: 2px solid #333; padding: 5px 10px; border-radius: 4px; font-size: 12px;
+        }
+        #alt-lock-indicator.on { color: #00ffaa; border-color: #00ffaa; box-shadow: 0 0 10px rgba(0, 255, 170, 0.3); }
+
+        #landing-status {
+            position: absolute; top: 60%; left: 50%; transform: translateX(-50%);
+            color: #00ffaa; font-weight: bold; font-size: 20px; text-shadow: 0 0 10px #00ffaa;
+            display: none; text-transform: uppercase; background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 5px;
+        }
+
+        #engine-status {
+            position: absolute; bottom: 110px; left: 50%; transform: translateX(-50%);
+            display: flex; gap: 10px; align-items: center;
+        }
+        .indicator-bulb { width: 10px; height: 10px; border-radius: 50%; background: #333; box-shadow: 0 0 5px #000; }
+        .indicator-bulb.on { background: #00ff00; box-shadow: 0 0 10px #00ff00; }
+        .indicator-bulb.off { background: #ff0000; box-shadow: 0 0 10px #ff0000; }
+
+        /* REPLAY BUTTON */
+        .replay-btn {
+            background: #d43317; color: white; border: 2px solid #ff5533;
+            padding: 20px 50px; font-size: 24px; font-weight: bold; cursor: pointer;
+            margin-top: 20px; pointer-events: auto; text-transform: uppercase;
+            box-shadow: 0 0 20px #ff5533;
+        }
+        .replay-btn:hover { background: #ff5533; transform: scale(1.05); }
+
+        @keyframes blink { 50% { opacity: 0; } }
+    </style>
+</head>
+<body>
+
+    <div id="menu-btn" onclick="togglePauseMenu()">⋮</div>
+
+    <!-- START SCREEN -->
+    <div id="overlay">
+        <h1 style="color: #00ffaa; text-shadow: 0 0 20px #00ffaa;">ZENITH</h1>
+        <p style="letter-spacing: 4px; font-size: 12px; margin-bottom: 40px;">ADVANCED HELICOPTER SIMULATOR</p>
+        <p class="blink">CLICK TO START</p>
+    </div>
+
+    <!-- PAUSE MENU -->
+    <div id="pause-menu">
+        <h2 style="color:#00ffaa; margin-bottom: 40px;">PAUSED</h2>
+        <div class="menu-btn-style" onclick="resumeGame()">RESUME</div>
+        <div class="menu-btn-style" onclick="showControls()">CONTROLS</div>
+        <div class="menu-btn-style" onclick="exitGame()">EXIT</div>
+    </div>
+
+    <!-- CONTROLS MENU -->
+    <div id="controls-menu">
+        <h2 style="color:#00ffaa;">KEY CONFIGURATION</h2>
+        <div id="bind-grid">
+            <!-- Populated by JS -->
+        </div>
+        <div class="menu-btn-style" onclick="hideControls()">BACK</div>
+    </div>
+
+    <div id="game-over">
+        <h1 style="font-size: 60px;">CRITICAL FAILURE</h1>
+        <p style="font-size: 24px;">AIRCRAFT DESTROYED</p>
+        <button class="replay-btn" onclick="resetGame()">REPLAY MISSION</button>
+    </div>
+
+    <div id="notification-area"></div>
+    <div id="landing-status">LANDED SAFELY</div>
+
+    <div id="hud-container">
+        <!-- Hidden HUD Controls -->
+        <div id="info-panel" class="hud-panel"></div>
+
+        <div id="crosshair">
+            <div class="ch-line ch-h"></div>
+            <div class="ch-line ch-v"></div>
+        </div>
+
+        <div id="alt-lock-indicator">ALTITUDE LOCK</div>
+
+        <!-- Engine Indicator -->
+        <div id="engine-status">
+            <div class="indicator-bulb" id="engine-bulb"></div>
+            <span style="color: #aaa; font-size: 12px; font-weight: bold;">ENGINE RPM</span>
+        </div>
+
+        <!-- Hybrid Bars for HUD -->
+        <div id="instruments-bar">
+            <div class="gauge">
+                <div class="gauge-label">ALTITUDE</div>
+                <div class="gauge-val" id="alt-val">0000</div>
+                <div class="bar-track"><div id="alt-bar-fill" class="bar-fill"></div></div>
+            </div>
+            <div class="gauge">
+                <div class="gauge-label">AIRSPEED</div>
+                <div class="gauge-val" id="speed-val">000</div>
+                <div class="bar-track"><div id="spd-bar-fill" class="bar-fill"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Three.js -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // --- CONFIG ---
+        const CONFIG = {
+            maxSpeed: 3.5,
+            acceleration: 0.04,
+            rotationSpeed: 0.002,
+            tiltFactor: 0.4,
+            rollFactor: 0.35, 
+            worldSize: 20000,
+            buildingCount: 500,
+            missileSpeed: 8.0,
+            gravity: 0.003,
+            gridSize: 500,
+            roadWidth: 80, 
+            landingSpeedThreshold: 1.0, 
+            landingDescentThreshold: 0.1,
+            crashSpeedThreshold: 1.8, 
+            blastRadiusSmall: 20,
+            blastRadiusBig: 100 
+        };
+
+        // --- GLOBAL STATE ---
+        let gameState = 'start'; 
+        let scene, camera, renderer;
+        let helicopter; // Main group, rotates YXZ
+        let cockpit, rotorBlade, tailRotor, navLights = [];
+        let terrain;
+        let missiles = [];
+        let explosions = [];
+        let cityData = []; 
+        let instancedBuildings, instancedCars, instancedPeople, instancedHelipads;
+        let cars = [];
+        let viewMode = 0; 
+
+        // --- KEY BINDINGS ---
+        const binds = {
+            'Forward': 'w',
+            'Backward': 's',
+            'Left': 'a',
+            'Right': 'd',
+            'Up': 'Space Button', 
+            'Down': 'Shift',
+            'Camera': 'c',
+            'Engine': 'e'
+        };
+        let keyState = {};
+
+        // Physics State
+        const physics = {
+            velocity: new THREE.Vector3(),
+            yaw: 0, pitch: 0, roll: 0, cameraPitch: 0,
+            altLocked: false,
+            isLanded: false,
+            engineOn: true,
+            rotorRPM: 1.0 
+        };
+
+        let lastSpaceTime = 0;
+
+        // UI Refs
+        const uiAlt = document.getElementById('alt-val');
+        const uiSpeed = document.getElementById('speed-val');
+        const lockInd = document.getElementById('alt-lock-indicator');
+        const landStatus = document.getElementById('landing-status');
+        const bindGrid = document.getElementById('bind-grid');
+        const engineBulb = document.getElementById('engine-bulb');
+        const altBarFill = document.getElementById('alt-bar-fill');
+        const spdBarFill = document.getElementById('spd-bar-fill');
+
+        function safeRequestPointerLock() {
+            try {
+                const promise = document.body.requestPointerLock();
+                if (promise) {
+                    promise.catch(err => {
+                        console.log("Pointer lock request failed/cancelled:", err);
+                    });
+                }
+            } catch (err) {
+                console.error("Pointer lock error:", err);
+            }
+        }
+
+        // --- EXPOSED FUNCTIONS ---
+        window.togglePauseMenu = () => {
+            if(gameState === 'playing') pauseGame();
+            else if(gameState === 'paused') resumeGame();
+        };
+        window.resumeGame = () => {
+            document.getElementById('pause-menu').style.display = 'none';
+            safeRequestPointerLock();
+            gameState = 'playing';
+        };
+        window.exitGame = () => { location.reload(); };
+        window.showControls = () => {
+            document.getElementById('pause-menu').style.display = 'none';
+            document.getElementById('controls-menu').style.display = 'flex';
+            gameState = 'controls';
+            renderBindGrid();
+        };
+        window.hideControls = () => {
+            document.getElementById('controls-menu').style.display = 'none';
+            document.getElementById('pause-menu').style.display = 'flex';
+            gameState = 'paused';
+        };
+        window.resetGame = () => {
+            helicopter.position.set(0, 150, 0);
+            helicopter.rotation.set(0,0,0);
+            physics.velocity.set(0,0,0);
+            physics.yaw = 0; physics.pitch = 0; physics.roll = 0;
+            physics.rotorRPM = 1.0; physics.engineOn = true;
+            
+            const dummy = new THREE.Object3D();
+            cityData.forEach(b => {
+                if(!b.active) {
+                    b.active = true;
+                    dummy.position.set(b.x, b.y, b.z);
+                    dummy.scale.set(b.width, b.height, b.depth);
+                    dummy.updateMatrix();
+                    instancedBuildings.setMatrixAt(b.index, dummy.matrix);
+                }
+            });
+            instancedBuildings.instanceMatrix.needsUpdate = true;
+
+            missiles.forEach(m => scene.remove(m.mesh)); missiles = [];
+            explosions.forEach(e => scene.remove(e.mesh)); explosions = [];
+
+            helicopter.visible = true;
+            document.getElementById('game-over').style.display = 'none';
+            safeRequestPointerLock();
+            gameState = 'playing';
+            notify("MISSION RESTARTED");
+        };
+
+        function pauseGame() {
+            gameState = 'paused';
+            document.exitPointerLock();
+            document.getElementById('pause-menu').style.display = 'flex';
+        }
+
+        // --- INITIALIZATION ---
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x88aabb);
+            scene.fog = new THREE.FogExp2(0xdcae97, 0.0012); 
+
+            camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 5000);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.body.appendChild(renderer.domElement);
+
+            const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambient);
+            const sun = new THREE.DirectionalLight(0xffeebb, 1.2);
+            sun.position.set(500, 1000, -500);
+            sun.castShadow = true;
+            sun.shadow.mapSize.width = 2048;
+            sun.shadow.mapSize.height = 2048;
+            sun.shadow.camera.near = 0.5;
+            sun.shadow.camera.far = 3000;
+            const d = 1500;
+            sun.shadow.camera.left = -d; sun.shadow.camera.right = d;
+            sun.shadow.camera.top = d; sun.shadow.camera.bottom = -d;
+            scene.add(sun);
+
+            createTerrain();
+            createCity();
+            createPeople();
+            createTraffic();
+            createHelicopter();
+
+            window.addEventListener('contextmenu', e => e.preventDefault());
+
+            // POINTER LOCK SAFETY
+            document.addEventListener('pointerlockchange', () => {
+                if (document.pointerLockElement !== document.body && gameState === 'playing') {
+                    pauseGame();
+                }
+            });
+
+            const overlay = document.getElementById('overlay');
+            overlay.addEventListener('click', () => {
+                safeRequestPointerLock();
+                overlay.style.display = 'none';
+                gameState = 'playing';
+                notify("SYSTEM INITIALIZED");
+            });
+
+            document.addEventListener('mousemove', onMouseMove);
+            document.addEventListener('mousedown', onMouseDown);
+            window.addEventListener('resize', onWindowResize);
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+
+            animate();
+        }
+
+        // --- ASSETS ---
+        function getTerrainHeight(x, z) {
+            const grid = CONFIG.gridSize; const width = CONFIG.roadWidth;
+            const dx = Math.abs(x % grid), dz = Math.abs(z % grid);
+            const distZ = Math.min(dz, grid - dz), distX = Math.min(dx, grid - dx);
+            if (distX < width / 2 || distZ < width / 2) return 0.2; 
+            let mask = 1.0; const blend = 30; 
+            if (distX < width/2 + blend) mask = Math.min(mask, (distX - width/2) / blend);
+            if (distZ < width/2 + blend) mask = Math.min(mask, (distZ - width/2) / blend);
+            const y = (Math.sin(x*0.001)*15) + (Math.cos(z*0.0015)*15) + (Math.sin(x*0.005+z*0.005)*2);
+            return Math.max(0.2, y * mask);
+        }
+
+        function createTerrain() {
+            const geo = new THREE.PlaneGeometry(CONFIG.worldSize, CONFIG.worldSize, 256, 256);
+            geo.rotateX(-Math.PI/2);
+            const pos = geo.attributes.position;
+            for(let i=0; i<pos.count; i++) pos.setY(i, getTerrainHeight(pos.getX(i), pos.getZ(i)));
+            geo.computeVertexNormals();
+            const tileCanvas = document.createElement('canvas'); tileCanvas.width = 512; tileCanvas.height = 512;
+            const tCtx = tileCanvas.getContext('2d');
+            tCtx.fillStyle = '#c2b280'; tCtx.fillRect(0,0,512,512);
+            tCtx.fillStyle = '#baa070'; for(let i=0;i<1000;i++) tCtx.fillRect(Math.random()*512, Math.random()*512, 2, 2);
+            const rw = (CONFIG.roadWidth / CONFIG.gridSize) * 512; 
+            tCtx.fillStyle = '#222'; tCtx.fillRect(0, 0, 512, rw/2); tCtx.fillRect(0, 512 - rw/2, 512, rw/2); tCtx.fillRect(0, 0, rw/2, 512); tCtx.fillRect(512 - rw/2, 0, rw/2, 512); 
+            tCtx.fillStyle = '#fff'; for(let i=0; i<512; i+=40) { tCtx.fillRect(i, 1, 20, 2); tCtx.fillRect(i, 510, 20, 2); tCtx.fillRect(1, i, 2, 20); tCtx.fillRect(510, i, 2, 20); }
+            const tex = new THREE.CanvasTexture(tileCanvas); tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.repeat.set(40,40); tex.anisotropy=renderer.capabilities.getMaxAnisotropy();
+            terrain = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }));
+            terrain.receiveShadow = true; scene.add(terrain);
+        }
+
+        function createCity() {
+            const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+            const c = document.createElement('canvas'); c.width = 64; c.height = 128;
+            const ctx = c.getContext('2d'); ctx.fillStyle = '#555'; ctx.fillRect(0,0,64,128); ctx.fillStyle = '#234'; 
+            for(let y=10; y<120; y+=15) for(let x=5; x<60; x+=12) if(Math.random()>0.3) ctx.fillRect(x,y,8,10);
+            const tex = new THREE.CanvasTexture(c); tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+            instancedBuildings = new THREE.InstancedMesh(boxGeo, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.6 }), CONFIG.buildingCount);
+            instancedBuildings.castShadow = true; instancedBuildings.receiveShadow = true; scene.add(instancedBuildings);
+
+            const pc = document.createElement('canvas'); pc.width = 128; pc.height = 128;
+            const pctx = pc.getContext('2d'); pctx.fillStyle = '#333'; pctx.fillRect(0,0,128,128); pctx.strokeStyle = '#ee0'; pctx.lineWidth = 4;
+            pctx.beginPath(); pctx.arc(64,64,50,0,Math.PI*2); pctx.stroke(); 
+            pctx.fillStyle = '#ee0'; pctx.font = 'bold 60px Arial'; pctx.textAlign = 'center'; pctx.textBaseline='middle'; pctx.fillText('H', 64, 64);
+            instancedHelipads = new THREE.InstancedMesh(new THREE.PlaneGeometry(1,1).rotateX(-Math.PI/2), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(pc), transparent:true, opacity:0.9, side: THREE.DoubleSide }), 100);
+            scene.add(instancedHelipads);
+
+            const dummy = new THREE.Object3D(); const padDummy = new THREE.Object3D();
+            let count = 0, padCount = 0;
+            while(count < CONFIG.buildingCount) {
+                let x = (Math.random()-0.5)*4000, z = (Math.random()-0.5)*4000;
+                const roadSafe = CONFIG.roadWidth/2 + 10;
+                const dx = Math.abs(x % CONFIG.gridSize), dz = Math.abs(z % CONFIG.gridSize);
+                if (Math.min(dx, CONFIG.gridSize-dx) < roadSafe || Math.min(dz, CONFIG.gridSize-dz) < roadSafe) continue;
+
+                const w = 25+Math.random()*35, d = 25+Math.random()*35, h = 40+Math.random()*160;
+                const gy = getTerrainHeight(x, z); const y = gy + h/2;
+                dummy.position.set(x, y, z); dummy.scale.set(w, h, d); dummy.updateMatrix();
+                instancedBuildings.setMatrixAt(count, dummy.matrix);
+
+                let hasPad = false;
+                if(h > 100 && padCount < 100 && Math.random() > 0.6) {
+                    padDummy.position.set(x, gy + h + 0.1, z);
+                    const ps = Math.min(w, d) * 0.8; padDummy.scale.set(ps, 1, ps); padDummy.updateMatrix();
+                    instancedHelipads.setMatrixAt(padCount, padDummy.matrix); hasPad = true;
+                }
+                cityData.push({ index: count, x, y, z, width: w, height: h, depth: d, active: true, groundY: gy, hasHelipad: hasPad, helipadIndex: hasPad?padCount++:-1 });
+                count++;
+            }
+        }
+
+        function createTraffic() {
+            instancedCars = new THREE.InstancedMesh(new THREE.BoxGeometry(4,1.5,2), new THREE.MeshPhongMaterial({color:0x444444}), 300);
+            instancedCars.castShadow = true; scene.add(instancedCars);
+            for(let i=0; i<300; i++) {
+                const axis = Math.random()>0.5?'x':'z';
+                const gl = Math.round(((Math.random()-0.5)*4000) / CONFIG.gridSize) * CONFIG.gridSize;
+                const lo = (Math.random()>0.5?15:-15); 
+                cars.push({ axis, line: gl, lane: lo, pos: (Math.random()-0.5)*4000, speed: (0.5+Math.random()*0.5)*(lo>0?1:-1), idx: i });
+            }
+        }
+
+        function createPeople() {
+            instancedPeople = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.5,0.5,1.8), new THREE.MeshLambertMaterial({color:0xaaaaaa}), 800);
+            instancedPeople.castShadow = true; scene.add(instancedPeople);
+            const dummy = new THREE.Object3D();
+            for(let i=0; i<800; i++) {
+                if(cityData.length===0) break;
+                const b = cityData[Math.floor(Math.random()*cityData.length)];
+                const a = Math.random()*Math.PI*2; const d = Math.max(b.width, b.depth)/2 + 2 + Math.random()*5;
+                const px = b.x + Math.cos(a)*d, pz = b.z + Math.sin(a)*d;
+                dummy.position.set(px, getTerrainHeight(px, pz) + 0.9, pz);
+                dummy.updateMatrix(); instancedPeople.setMatrixAt(i, dummy.matrix);
+            }
+        }
+
+        function createHelicopter() {
+            helicopter = new THREE.Group(); 
+            // Setting rotation order to YXZ ensures Pitch (X) applies relative to Yaw (Y)
+            helicopter.rotation.order = 'YXZ';
+            helicopter.position.set(0, 150, 0); 
+            scene.add(helicopter);
+            
+            const mainBody = new THREE.Group(); helicopter.add(mainBody);
+            
+            const bodyMat = new THREE.MeshStandardMaterial({color:0x222222, roughness:0.6});
+            const darkMat = new THREE.MeshStandardMaterial({color:0x111111, roughness:0.5});
+            const glassMat = new THREE.MeshPhongMaterial({color:0x446688, opacity:0.6, transparent:true});
+
+            mainBody.add(new THREE.Mesh(new THREE.BoxGeometry(2.2, 2.5, 6), bodyMat)); // Body
+            const nose = new THREE.Mesh(new THREE.ConeGeometry(1.2, 3, 4).rotateX(-Math.PI/2).rotateZ(Math.PI/4), bodyMat); nose.position.z = -4.5; mainBody.add(nose);
+            const glass = new THREE.Mesh(new THREE.BoxGeometry(2, 1.2, 2.5), glassMat); glass.position.set(0, 0.5, -2.5); glass.rotation.x = 0.2; mainBody.add(glass);
+            const tail = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.8, 8), bodyMat); tail.position.set(0, 0.5, 6); mainBody.add(tail);
+            const vStab = new THREE.Mesh(new THREE.BoxGeometry(0.2, 2.5, 1.5), bodyMat); vStab.position.set(0, 1.5, 9.5); vStab.rotation.x = 0.3; mainBody.add(vStab);
+            
+            const sensor = new THREE.Mesh(new THREE.SphereGeometry(0.4), darkMat); sensor.position.set(0, -1.2, -4); mainBody.add(sensor);
+            const redLight = new THREE.PointLight(0xff0000, 1, 20); redLight.position.set(-2, 0, 0); mainBody.add(redLight);
+            const greenLight = new THREE.PointLight(0x00ff00, 1, 20); greenLight.position.set(2, 0, 0); mainBody.add(greenLight);
+            navLights.push(redLight, greenLight);
+
+            const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 1.5), darkMat); mast.position.y = 1.5; mainBody.add(mast);
+            rotorBlade = new THREE.Group(); rotorBlade.position.y=2.2; mainBody.add(rotorBlade);
+            const bladeGeo = new THREE.BoxGeometry(0.4, 0.05, 14);
+            const b1 = new THREE.Mesh(bladeGeo, darkMat); rotorBlade.add(b1);
+            const b2 = new THREE.Mesh(bladeGeo, darkMat); b2.rotation.y = Math.PI/2; rotorBlade.add(b2);
+
+            tailRotor = new THREE.Group(); tailRotor.position.set(0.3,1.5,9.5); tailRotor.rotateZ(1.57); mainBody.add(tailRotor);
+            const tr = new THREE.Mesh(new THREE.BoxGeometry(0.2,2.5,0.1), darkMat); tailRotor.add(tr); tailRotor.add(tr.clone().rotateZ(1.57));
+
+            cockpit = new THREE.Group(); 
+            cockpit.position.z = -4.8; 
+            helicopter.add(cockpit);
+            cockpit.add(camera); camera.position.set(0, 0, 0);
+        }
+
+        // --- INPUT & UI ---
+
+        function renderBindGrid() {
+            bindGrid.innerHTML = '';
+            for (const [action, currentKey] of Object.entries(binds)) {
+                const row = document.createElement('div'); row.className = 'bind-row';
+                row.innerHTML = `<span>${action}</span>`;
+                const btn = document.createElement('div'); btn.className = 'bind-key';
+                btn.innerText = currentKey.toUpperCase();
+                btn.onclick = () => startRebind(action, btn);
+                row.appendChild(btn);
+                bindGrid.appendChild(row);
+            }
+            bindGrid.innerHTML += `<div class='bind-row'><span>Fire</span><div class='bind-key'>L-CLICK</div></div>`;
+            bindGrid.innerHTML += `<div class='bind-row'><span>Bunker Buster</span><div class='bind-key'>R-CLICK</div></div>`;
+        }
+
+        function startRebind(action, btnElement) {
+            btnElement.innerText = '...'; btnElement.classList.add('listening');
+            
+            const handler = (e) => {
+                e.preventDefault(); e.stopPropagation();
+                let key = e.key; 
+                // Normalize key names for display and lookup
+                if(key === ' ') key = 'Space Button';
+                if(key === 'Shift') key = 'Shift';
+                
+                // Update bind and re-render
+                binds[action] = key;
+                document.removeEventListener('keydown', handler); 
+                renderBindGrid();
+            };
+            document.addEventListener('keydown', handler, { once: true });
+        }
+
+        function onKeyDown(e) {
+            if(gameState === 'controls') return; 
+            if(e.key === 'Escape') {
+                if(gameState === 'playing') pauseGame();
+                else if(gameState === 'paused') resumeGame();
+                return;
+            }
+            if(e.key === 'Alt') e.preventDefault();
+
+            let k = e.key; 
+            if(k === ' ') k = 'Space Button';
+            if(k === 'Shift') k = 'Shift';
+
+            if (k === binds['Up']) {
+                if (!e.repeat && (Date.now() - lastSpaceTime < 300)) toggleAltLock();
+                lastSpaceTime = Date.now();
+            }
+            if (k.toLowerCase() === binds['Camera'].toLowerCase()) toggleCamera();
+            if (k.toLowerCase() === binds['Engine'].toLowerCase()) toggleEngine();
+
+            keyState[k.toLowerCase()] = true;
+            keyState[k] = true; // Store normalized name too
+        }
+
+        function onKeyUp(e) {
+            let k = e.key; 
+            if(k === ' ') k = 'Space Button';
+            if(k === 'Shift') k = 'Shift';
+            
+            keyState[k.toLowerCase()] = false;
+            keyState[k] = false; // Store normalized name too
+        }
+
+        function isPressed(action) { 
+            const key = binds[action];
+            return keyState[key.toLowerCase()] || keyState[key]; 
+        }
+
+        function toggleCamera() {
+            viewMode = (viewMode+1)%2;
+            if(viewMode===0) { cockpit.add(camera); camera.position.set(0,0,0); camera.rotation.set(0,0,0); notify("COCKPIT CAM"); }
+            else { helicopter.add(camera); camera.position.set(0,15,40); camera.rotation.set(-0.2,0,0); notify("CHASE CAM"); }
+        }
+
+        function toggleEngine() {
+            physics.engineOn = !physics.engineOn;
+            notify(physics.engineOn ? "ENGINE STARTING" : "ENGINE CUTOFF");
+        }
+
+        function toggleAltLock() {
+            physics.altLocked = !physics.altLocked;
+            lockInd.classList.toggle('on', physics.altLocked);
+            notify(physics.altLocked ? "ALTITUDE LOCKED" : "ALTITUDE RELEASED");
+            if(physics.altLocked) physics.velocity.y = 0;
+        }
+
+        function notify(msg) {
+            const d=document.createElement('div'); d.className='notify-msg'; d.innerText=msg;
+            document.getElementById('notification-area').appendChild(d); setTimeout(()=>d.remove(), 3000);
+        }
+
+        function onMouseMove(e) {
+            if(gameState !== 'playing') return;
+            physics.yaw -= e.movementX * CONFIG.rotationSpeed;
+            physics.cameraPitch -= e.movementY * CONFIG.rotationSpeed;
+            physics.cameraPitch = Math.max(-0.6, Math.min(0.6, physics.cameraPitch));
+        }
+        function onMouseDown(e) { if(gameState==='playing') { if(e.button===0) fireMissile(false); if(e.button===2) fireMissile(true); } }
+        function onWindowResize() { camera.aspect=window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); }
+
+        // --- PHYSICS & GAME LOOP ---
+
+        function updatePhysics() {
+            if(gameState !== 'playing') return;
+
+            // Engine RPM Logic
+            if(physics.engineOn && physics.rotorRPM < 1.0) physics.rotorRPM += 0.005;
+            if(!physics.engineOn && physics.rotorRPM > 0) physics.rotorRPM -= 0.003;
+            
+            engineBulb.className = physics.rotorRPM > 0.9 ? 'indicator-bulb on' : 'indicator-bulb off';
+
+            // Apply Yaw (Y) rotation first
+            helicopter.rotation.y = physics.yaw;
+            
+            // Apply Pitch (X) and Roll (Z) relative to Yaw
+            helicopter.rotation.x = physics.pitch; 
+            helicopter.rotation.z = physics.roll;
+
+            // Camera handling
+            if(viewMode===0) camera.rotation.x = physics.cameraPitch;
+            else camera.rotation.x = -0.2 + (physics.cameraPitch * 0.5);
+
+            // LIFT LOGIC
+            let lift = 0;
+            if (physics.engineOn && physics.rotorRPM > 0.3) {
+                if(isPressed('Up')) lift = CONFIG.acceleration;
+                if(isPressed('Down')) lift = -CONFIG.acceleration;
+                lift *= physics.rotorRPM;
+            }
+
+            const fwd = new THREE.Vector3(0,0,-1).applyAxisAngle(new THREE.Vector3(0,1,0), physics.yaw);
+            const right = new THREE.Vector3(1,0,0).applyAxisAngle(new THREE.Vector3(0,1,0), physics.yaw);
+
+            let tP=0, tR=0;
+            const movePower = physics.rotorRPM;
+            if(isPressed('Forward')) { physics.velocity.addScaledVector(fwd, CONFIG.acceleration * movePower); tP = -CONFIG.tiltFactor; }
+            else if(isPressed('Backward')) { physics.velocity.addScaledVector(fwd, -CONFIG.acceleration/2 * movePower); tP = CONFIG.tiltFactor/2; }
+            if(isPressed('Left')) { physics.velocity.addScaledVector(right, -CONFIG.acceleration * movePower); tR = CONFIG.rollFactor; }
+            else if(isPressed('Right')) { physics.velocity.addScaledVector(right, CONFIG.acceleration * movePower); tR = -CONFIG.rollFactor; }
+
+            // Stabilization (Snappier return to level flight)
+            physics.pitch = THREE.MathUtils.lerp(physics.pitch, tP, 0.1);
+            physics.roll = THREE.MathUtils.lerp(physics.roll, tR, 0.1);
+
+            // Gravity Logic
+            if(physics.altLocked && lift===0 && physics.engineOn && physics.rotorRPM > 0.8) {
+                physics.velocity.y *= 0.9; // Hover mode
+            } else {
+                physics.velocity.y += lift - CONFIG.gravity; // Normal flight or falling
+            }
+
+            physics.velocity.x *= 0.98; physics.velocity.z *= 0.98;
+            helicopter.position.add(physics.velocity);
+
+            // Collisions
+            const hs = Math.sqrt(physics.velocity.x**2 + physics.velocity.z**2);
+            const vs = Math.abs(physics.velocity.y);
+            const gh = getTerrainHeight(helicopter.position.x, helicopter.position.z);
+            let onGround = false; let landedBuilding = null;
+
+            if(helicopter.position.y < gh + 2.5) {
+                if(hs < CONFIG.landingSpeedThreshold && vs < CONFIG.landingDescentThreshold) {
+                    helicopter.position.y = gh+2.5; physics.velocity.set(physics.velocity.x*0.9, 0, physics.velocity.z*0.9); onGround=true;
+                } else {
+                    if (hs > CONFIG.crashSpeedThreshold || vs > CONFIG.crashSpeedThreshold) crash();
+                    else { physics.velocity.y = Math.abs(physics.velocity.y) * 0.5; helicopter.position.y = gh + 2.6; } 
+                }
+            }
+
+            if(helicopter.position.y < 250) {
+                for(let b of cityData) {
+                    if(b.active) {
+                        const dx = Math.abs(helicopter.position.x - b.x);
+                        const dz = Math.abs(helicopter.position.z - b.z);
+                        if(dx < b.width/2+3 && dz < b.depth/2+3) {
+                            const roof = b.y + b.height/2;
+                            if(helicopter.position.y >= roof-1 && helicopter.position.y < roof+5) {
+                                if(hs < CONFIG.landingSpeedThreshold && vs < CONFIG.landingDescentThreshold) {
+                                    helicopter.position.y = roof+2.5; physics.velocity.set(physics.velocity.x*0.9, 0, physics.velocity.z*0.9); onGround=true; landedBuilding=b;
+                                } else { 
+                                    if(vs > CONFIG.crashSpeedThreshold) { crash(); destroyBuilding(b); }
+                                    else { physics.velocity.y = Math.abs(physics.velocity.y) * 0.5; helicopter.position.y = roof + 2.6; }
+                                }
+                            } else if(helicopter.position.y < roof) { 
+                                if(hs > CONFIG.crashSpeedThreshold) { crash(); destroyBuilding(b); }
+                                else { 
+                                    const signX = Math.sign(helicopter.position.x - b.x); helicopter.position.x = b.x + signX*(b.width/2+3.1); physics.velocity.x *= -0.5;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if(onGround) {
+                landStatus.style.display = 'block';
+                physics.isLanded = true;
+                const txt = (landedBuilding && landedBuilding.hasHelipad) ? "HELIPAD SECURED" : "LANDED SAFELY";
+                landStatus.innerText = txt;
+                landStatus.style.color = (landedBuilding && landedBuilding.hasHelipad) ? "#FFD700" : "#00ffaa";
+                landStatus.style.borderColor = (landedBuilding && landedBuilding.hasHelipad) ? "#FFD700" : "#00ffaa"; 
+            } else {
+                landStatus.style.display = 'none'; physics.isLanded = false;
+            }
+
+            const spin = 0.4 * physics.rotorRPM;
+            rotorBlade.rotation.y += spin;
+            tailRotor.rotateZ(spin);
+            
+            if(Date.now() % 1000 < 100) navLights.forEach(l => l.intensity = 2); else navLights.forEach(l => l.intensity = 0);
+        }
+
+        function updateTraffic() {
+            const d = new THREE.Object3D();
+            cars.forEach(c => {
+                c.pos += c.speed; if(c.pos>2000)c.pos-=4000; if(c.pos<-2000)c.pos+=4000;
+                if(c.axis==='x') { d.position.set(c.pos,1,c.line+c.lane); d.rotation.y=c.speed>0?0:Math.PI; }
+                else { d.position.set(c.line+c.lane,1,c.pos); d.rotation.y=c.speed>0?Math.PI/2:-Math.PI/2; }
+                d.position.y = getTerrainHeight(d.position.x, d.position.z) + 0.8; 
+                d.updateMatrix(); instancedCars.setMatrixAt(c.idx, d.matrix);
+            });
+            instancedCars.instanceMatrix.needsUpdate = true;
+        }
+
+        function fireMissile(isBig) {
+            const scale = isBig ? 3.0 : 0.2; const color = isBig ? 0xff0000 : 0xffff00;
+            const g = new THREE.CylinderGeometry(scale/3,scale/3, isBig ? 8 : 3).rotateX(1.57);
+            const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({color:color}));
+            const p = new THREE.Vector3(isBig?2:-2,-2,-2).applyMatrix4(cockpit.matrixWorld); 
+            m.position.copy(p);
+            const d = new THREE.Vector3();
+            if(viewMode===0) camera.getWorldDirection(d); else d.set(0,0,-1).applyEuler(new THREE.Euler(physics.pitch, physics.yaw, 0));
+            m.lookAt(p.clone().add(d)); scene.add(m);
+            missiles.push({ mesh: m, vel: d.multiplyScalar(CONFIG.missileSpeed * (isBig?0.8:1)), life: 200, isBig: isBig });
+        }
+
+        function destroyBuilding(b) {
+            if(!b.active) return;
+            b.active = false;
+            explode(new THREE.Vector3(b.x, b.y, b.z), b.width/2);
+            const d = new THREE.Object3D(); d.scale.set(0,0,0);
+            instancedBuildings.setMatrixAt(b.index, d.matrix); instancedBuildings.instanceMatrix.needsUpdate=true;
+            if(b.hasHelipad) { instancedHelipads.setMatrixAt(b.helipadIndex, d.matrix); instancedHelipads.instanceMatrix.needsUpdate=true; }
+        }
+
+        function destroyArea(x, z, radius) {
+            for(let b of cityData) {
+                if(b.active) {
+                    const dist = Math.sqrt((b.x - x)**2 + (b.z - z)**2);
+                    if(dist < radius + b.width/2) {
+                        destroyBuilding(b);
+                    }
+                }
+            }
+        }
+
+        function explode(p, s) {
+            const m = new THREE.Mesh(new THREE.DodecahedronGeometry(s,0), new THREE.MeshBasicMaterial({color:0xff5500, transparent:true}));
+            m.position.copy(p); scene.add(m); explosions.push({mesh:m, life:50});
+        }
+
+        function crash() {
+            gameState = 'crashed'; explode(helicopter.position, 5); helicopter.visible = false;
+            document.exitPointerLock(); document.getElementById('game-over').style.display='flex';
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            updatePhysics(); updateTraffic(); 
+            
+            for(let i=missiles.length-1; i>=0; i--) {
+                const m=missiles[i]; m.mesh.position.add(m.vel); m.life--;
+                let exploded = false;
+                if(m.mesh.position.y < getTerrainHeight(m.mesh.position.x, m.mesh.position.z)) exploded = true;
+                if(!exploded) {
+                    for(let b of cityData) {
+                        if(b.active && Math.abs(m.mesh.position.x-b.x)<b.width/2 && Math.abs(m.mesh.position.z-b.z)<b.depth/2 && m.mesh.position.y<b.y+b.height/2) {
+                            exploded = true; break;
+                        }
+                    }
+                }
+                if(exploded || m.life<=0) {
+                    const radius = m.isBig ? CONFIG.blastRadiusBig : CONFIG.blastRadiusSmall;
+                    const size = m.isBig ? 30 : 2;
+                    explode(m.mesh.position, size);
+                    
+                    if(m.isBig) destroyArea(m.mesh.position.x, m.mesh.position.z, radius);
+                    else destroyArea(m.mesh.position.x, m.mesh.position.z, radius);
+
+                    scene.remove(m.mesh); missiles.splice(i,1);
+                }
+            }
+            
+            for(let i=explosions.length-1; i>=0; i--) {
+                const e=explosions[i]; e.life--; e.mesh.scale.multiplyScalar(1.02); e.mesh.material.opacity=e.life/50;
+                if(e.life<=0) { scene.remove(e.mesh); explosions.splice(i,1); }
+            }
+
+            if(gameState==='playing') {
+                const altRatio = Math.min(helicopter.position.y / 500, 1); 
+                const speed = Math.sqrt(physics.velocity.x**2 + physics.velocity.z**2) * 50;
+                const spdRatio = Math.min(speed / 200, 1);
+                
+                uiAlt.innerText = Math.round(helicopter.position.y).toString().padStart(4,'0');
+                uiSpeed.innerText = Math.round(speed).toString().padStart(3,'0');
+
+                altBarFill.style.width = (altRatio * 100) + '%';
+                spdBarFill.style.width = (spdRatio * 100) + '%';
+            }
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>
